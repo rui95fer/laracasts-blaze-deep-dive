@@ -73,3 +73,66 @@
   {{-- x-heading, x-text, x-badge etc. are NOT touched by Blaze out of the box --}}
   {{-- Next episode: how to tell Blaze to optimize your own components --}}
   ```
+
+---
+
+## Episode 03 — Three Levels of Optimization
+
+- **Add `@blaze` to the top of a single component to opt it into Blaze's optimized compiler.**
+  ```blade
+  {{-- resources/views/components/option.blade.php --}}
+  @blaze
+  <option {{ $attributes }}>{{ $slot }}</option>
+  ```
+  ```bash
+  php artisan view:clear
+  ```
+
+- **To optimize all components at once, use `Blaze::optimizeIn()` in your service provider instead of adding `@blaze` everywhere.**
+  ```php
+  // app/Providers/AppServiceProvider.php
+  use Livewire\Blaze\Blaze;
+
+  public function boot(): void
+  {
+      Blaze::optimizeIn(resource_path('views/components'));
+  }
+  ```
+
+- **Blaze has three levels of performance — each one goes deeper.**
+  ```
+  Level 1 — Optimized compiler (default, just add @blaze)
+      → ~2× speed improvement, removes most Blade overhead
+      → 700ms → 314ms
+
+  Level 2 — Memoization (memo: true)
+      → Component renders once, result is reused everywhere else
+      → Best for components with expensive work (queries, session lookups)
+      → 314ms → 97ms
+
+  Level 3 — Code folding (fold: true)
+      → Goes even deeper (covered in later episodes)
+      → 97ms → 52ms
+  ```
+
+- **Use `memo: true` on any component that does expensive work inside a loop — it renders once and caches the result.**
+  ```blade
+  {{-- resources/views/components/online-count.blade.php --}}
+  @blaze(memo: true)
+  {{-- This DB query now only runs once no matter how many times the component is used --}}
+  <span>{{ DB::table('logins')->where(...)->count() }} online</span>
+  ```
+
+- **Use `fold: true` on static, repeated components like select options to collapse them at compile time.**
+  ```blade
+  {{-- resources/views/components/option.blade.php --}}
+  @blaze(fold: true)
+  <option {{ $attributes }}>{{ $slot }}</option>
+  ```
+
+- **Summary: Flux users get all three levels for free. Custom components start at Level 1 and you opt into deeper levels as needed.**
+  ```
+  Flux + Blaze installed:         ~35ms  (all levels automatic)
+  Custom + @blaze on everything:  ~314ms  (Level 1 only)
+  Custom + memo + fold:            ~52ms  (all three levels)
+  ```

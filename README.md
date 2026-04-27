@@ -136,3 +136,47 @@
   Custom + @blaze on everything:  ~314ms  (Level 1 only)
   Custom + memo + fold:            ~52ms  (all three levels)
   ```
+
+---
+
+## Episode 04 — Benchmarking Blade
+
+- **Blade component overhead is death by a thousand cuts — every layer adds cost.**
+  ```
+  Benchmark: rendering the same component 25,000 times
+
+  Full Blade component (props, attributes, slot):  ~200ms
+  Bare Blade component (no props, no merging):      ~80ms
+  @include (bypasses component architecture):       ~44ms
+  PHP require (bypasses Blade entirely):            ~12ms
+  Inline HTML (no files, no Blade):                  ~3ms
+  ```
+
+- **The two biggest cost drivers inside a Blade component are attribute merging and `$slot`.**
+  ```blade
+  {{-- These two lines alone account for most of the overhead --}}
+  @props(['type' => 'button'])
+
+  <button {{ $attributes->merge(['class' => 'px-4 py-2']) }}>  {{-- most expensive --}}
+      {{ $slot }}                                               {{-- second most expensive --}}
+  </button>
+  ```
+
+- **`@include` is not just a PHP `require` — it has its own overhead on top.**
+  ```blade
+  {{-- Slower than you think — Blade does extra work around each include --}}
+  @include('components.button')   {{-- ~44ms for 25k iterations --}}
+  ```
+  ```php
+  // A raw PHP require is ~4× faster than @include
+  require resource_path('views/components/button.blade.php');  // ~12ms
+  ```
+
+- **PHP itself is extremely fast at looping — the bottleneck is always Blade's layer, not PHP.**
+  ```php
+  // Pure PHP loop with inline HTML: ~3ms for 25,000 iterations
+  // The moment you add any Blade layer on top, cost multiplies
+  for ($i = 0; $i < 25000; $i++) {
+      echo '<button>Click</button>';
+  }
+  ```

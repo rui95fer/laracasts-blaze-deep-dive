@@ -231,3 +231,47 @@
   Vanilla Blade component → many PHP calls per render
   Blaze-optimized component → stripped-down compiled output, far fewer calls
   ```
+
+---
+
+## Episode 06 — Intercepting Blade Compilation
+
+- **Blade exposes a `precompiler` hook that lets you intercept and mutate a view's raw string before it gets compiled.**
+  ```php
+  // app/Providers/AppServiceProvider.php
+  use Illuminate\Support\Facades\Blade;
+
+  public function boot(): void
+  {
+      Blade::precompiler(function (string $input): string {
+          dd($input); // the entire raw string contents of the Blade file
+      });
+  }
+  ```
+
+- **Whatever you return from the precompiler is what Blade compiles — you fully control the output.**
+  ```php
+  Blade::precompiler(function (string $input): string {
+      return 'foo'; // Blade will compile "foo" instead of the original file contents
+  });
+  ```
+
+- **Use `preg_replace_callback()` to find and replace specific Blade tags inside the raw string.**
+  ```php
+  Blade::precompiler(function (string $input): string {
+      return preg_replace_callback(
+          '/<x-(?P<name>[\w-]+)(\s[^>]*)?\/>/',  // match self-closing Blade components
+          fn ($matches) => "<!-- replaced: {$matches['name']} -->",
+          $input
+      );
+  });
+  ```
+
+- **This is the exact mechanism Blaze uses under the hood — intercept the tag, compile it yourself, skip all the expensive Blade component machinery.**
+  ```
+  Normal flow:
+    <x-button /> → Blade compiler → resolveAnonymousComponent, shouldRender, startComponent... → slow
+
+  Blaze flow:
+    <x-button /> → precompiler intercepts → custom compiled output → fast
+  ```

@@ -180,3 +180,54 @@
       echo '<button>Click</button>';
   }
   ```
+
+---
+
+## Episode 05 — How The Blade Compiler Works
+
+- **Blade is not PHP — it gets compiled into a raw PHP file before it runs.**
+  ```blade
+  {{-- Your source file: resources/views/benchmark.blade.php --}}
+  {{ now() }}
+  ```
+  ```php
+  // What PHP actually executes: storage/framework/views/abc123.php
+  <?php echo e(now()); ?>
+  ```
+
+- **Compiled view files live in `storage/framework/views/` — you can inspect them anytime.**
+  ```bash
+  ls storage/framework/views/
+  # Each file is a compiled PHP version of one of your Blade views
+  ```
+
+- **Blade recompiles a view by comparing file modified timestamps — not on every request.**
+  ```
+  resources/views/button.blade.php  ← last modified: 10:01am
+  storage/framework/views/abc.php   ← last modified: 10:00am
+
+  Source is newer → recompile.
+  Source is same or older → use the cached compiled file.
+  ```
+
+- **`@include` compiles to `env()->make()` + `render()` — that's where its overhead comes from.**
+  ```php
+  // What @include('components.button') compiles to:
+  echo $__env->make('components.button', array_diff_key(get_defined_vars(), ...))->render();
+  // env()->make() resolves the view, array_diff_key extracts variables — neither is cheap
+  ```
+
+- **`<x-component>` compiles to even more steps — this is why it's 2× slower than `@include`.**
+  ```php
+  // What <x-button /> compiles to (simplified):
+  $component = app()->make(\App\View\Components\Button::class);
+  $component->withAttributes([...]);
+  echo $component->resolveView()->render();
+  // resolveAnonymousComponent, shouldRender, startComponent, renderComponent... lots of steps
+  ```
+
+- **Blaze's job is to skip as much of that compiled output as possible.**
+  ```
+  Vanilla Blade component → many PHP calls per render
+  Blaze-optimized component → stripped-down compiled output, far fewer calls
+  ```

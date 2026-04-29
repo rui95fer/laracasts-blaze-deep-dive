@@ -275,3 +275,67 @@
   Blaze flow:
     <x-button /> → precompiler intercepts → custom compiled output → fast
   ```
+
+---
+
+## Episode 07 — Refactor Into A Compiler Class
+
+- **Move precompiler logic out of the closure into a dedicated `Compiler` class to keep things clean.**
+  ```php
+  // app/Providers/AppServiceProvider.php
+  Blade::precompiler(fn ($input) => (new Compiler)->compile($input));
+  ```
+  ```php
+  class Compiler
+  {
+      protected string $pattern = '/<x-(?P<name>[\w-]+)(\s[^>]*)?\/?>/';
+
+      function compile(string $input): string
+      {
+          return preg_replace_callback($this->pattern, $this->match(...), $input);
+      }
+
+      function match(array $groups): string
+      {
+          $name = $groups['name'];
+          // ... build replacement output
+      }
+  }
+  ```
+
+- **Use PHP's first-class callable syntax (`$this->match(...)`) to pass a method as a clean callback.**
+  ```php
+  // Instead of a nested closure:
+  preg_replace_callback($pattern, function ($groups) { ... }, $input);
+
+  // Use first-class callable — cleaner, keeps nesting flat:
+  preg_replace_callback($this->pattern, $this->match(...), $input);
+  ```
+
+- **Replace the matched tag with a raw PHP `require` pointing directly to the component file.**
+  ```php
+  function match(array $groups): string
+  {
+      $name = $groups['name'];
+      $path = resource_path("views/components/{$name}.blade.php");
+
+      return <<<PHP
+      <?php require '{$path}'; ?>
+      PHP;
+  }
+  ```
+
+- **Requiring the raw `.blade.php` file only works if the component contains no Blade syntax — any `{{ }}` or `@` directives will break.**
+  ```blade
+  {{-- This component works with a raw require: --}}
+  <button class="px-4 py-2">Click</button>
+
+  {{-- This one does NOT — Blade syntax needs to be compiled first: --}}
+  <button class="{{ $class }}">{{ $slot }}</button>
+  ```
+
+- **The next step is to compile the component file into PHP first, then require the compiled output — that's what the next episode covers.**
+  ```
+  Current:  require 'button.blade.php'     ← breaks with any Blade syntax
+  Next:     require 'compiled/button.php'  ← works with everything
+  ```

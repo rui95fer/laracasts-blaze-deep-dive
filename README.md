@@ -339,3 +339,60 @@
   Current:  require 'button.blade.php'     ← breaks with any Blade syntax
   Next:     require 'compiled/button.php'  ← works with everything
   ```
+
+---
+
+## Episode 08 — The Optimized Compiler
+
+- **Never require a `.blade.php` file directly — compile it to PHP first, then require the compiled output.**
+  ```php
+  // Wrong: PHP can't understand Blade syntax
+  require resource_path('views/components/button.blade.php');
+
+  // Right: require the compiled PHP version
+  require storage_path('framework/views/abc123.php');
+  ```
+
+- **Use `Blade::compileString()` to compile raw Blade contents into PHP without going through the filesystem.**
+  ```php
+  $source    = file_get_contents($sourcePath);
+  $compiled  = Blade::compileString($source);
+  ```
+
+- **Hash the source path to generate a stable, unique filename for the compiled output — the same way Laravel does it.**
+  ```php
+  $hash         = substr(md5($sourcePath), 0, 8);
+  $compiledPath = storage_path("framework/views/{$hash}.php");
+
+  file_put_contents($compiledPath, $compiled);
+  ```
+
+- **Putting it all together: intercept the tag, compile the component, write it to storage, require it.**
+  ```php
+  function match(array $groups): string
+  {
+      $name         = $groups['name'];
+      $sourcePath   = resource_path("views/components/{$name}.blade.php");
+
+      $hash         = substr(md5($sourcePath), 0, 8);
+      $compiledPath = storage_path("framework/views/{$hash}.php");
+
+      $source   = file_get_contents($sourcePath);
+      $compiled = Blade::compileString($source);
+
+      file_put_contents($compiledPath, $compiled);
+
+      return <<<PHP
+      <?php require '{$compiledPath}'; ?>
+      PHP;
+  }
+  ```
+
+- **This is the core of what Blaze's optimized compiler does — skip all of Blade's component machinery and replace it with a plain `require` of a pre-compiled file.**
+  ```
+  Blade's default path:
+    <x-button /> → resolveComponent → shouldRender → startComponent → render → slow
+
+  Our toy compiler's path (and Blaze's real path):
+    <x-button /> → compile source → write PHP file → require it → fast
+  ```

@@ -457,3 +457,40 @@
   @blaze(memo: true)       {{-- Level 2: memoize this component --}}
   @blaze(fold: true)       {{-- Level 3: code fold this component --}}
   ```
+
+---
+
+## Episode 10 — How Fast Is Our Toy
+
+- **The optimized compiler (Level 1) alone takes a full Blade component from ~87ms down to ~6ms for 25,000 renders.**
+  ```
+  Non-optimized (normal Blade):  ~87ms   for 25,000 iterations
+  @blaze (optimized compiler):    ~6ms   for 25,000 iterations
+  ```
+
+- **Level 1 removes Blade's overhead — but any expensive work inside the component still runs on every render.**
+  ```php
+  // @blaze cuts Blade's machinery, but this usleep still runs 25,000 times
+  @blaze
+  <div>{{ $this->someExpensiveWork() }}</div>
+
+  // 10 microseconds × 25,000 = 250ms of unavoidable overhead remaining
+  ```
+
+- **Common sources of per-render overhead that Level 1 cannot remove:**
+  ```
+  - Attribute bag merging
+  - Large prop lists
+  - match/switch statements
+  - Auth checks (auth()->user())
+  - Session lookups
+  - Cache reads
+  - Database queries
+  ```
+
+- **Memoization (Level 2) and code folding (Level 3) exist to eliminate that remaining per-render overhead — covered in the next episodes.**
+  ```
+  Level 1 — optimized compiler:  bypasses Blade machinery         → ~6ms
+  Level 2 — memoization:         renders once, reuses the result  → eliminates repeated work
+  Level 3 — code folding:        collapses static output at compile time → near-zero runtime cost
+  ```

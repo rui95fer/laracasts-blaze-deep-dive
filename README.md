@@ -396,3 +396,64 @@
   Our toy compiler's path (and Blaze's real path):
     <x-button /> → compile source → write PHP file → require it → fast
   ```
+
+
+---
+
+## Episode 09 — The Blaze Directive
+
+- **Check for `@blaze` in the component's source before optimizing — fall back to normal Blade if it's absent.**
+  ```php
+  function match(array $groups): string
+  {
+      $fallback   = $groups[0]; // the original tag, e.g. <x-button />
+      $sourcePath = resource_path("views/components/{$groups['name']}.blade.php");
+
+      if (! $this->shouldOptimize($sourcePath)) {
+          return $fallback; // leave it for Blade to handle normally
+      }
+
+      return $this->compileComponent($sourcePath);
+  }
+
+  function shouldOptimize(string $path): bool
+  {
+      return str_contains(file_get_contents($path), '@blaze');
+  }
+  ```
+
+- **Always return the original tag as the fallback — returning nothing removes the component from the output entirely.**
+  ```php
+  // Wrong: returns nothing, component disappears from the page
+  if (! $this->shouldOptimize($path)) {
+      return '';
+  }
+
+  // Right: returns the original tag so Blade handles it as normal
+  if (! $this->shouldOptimize($path)) {
+      return $groups[0];
+  }
+  ```
+
+- **Strip `@blaze` from the source before compiling so it doesn't end up in the compiled PHP output.**
+  ```php
+  function compileComponent(string $sourcePath): string
+  {
+      $contents = file_get_contents($sourcePath);
+      $contents = str_replace('@blaze', '', $contents); // remove the directive
+
+      $hash         = substr(md5($sourcePath), 0, 8);
+      $compiledPath = storage_path("framework/views/{$hash}.php");
+
+      file_put_contents($compiledPath, Blade::compileString($contents));
+
+      return "<?php require '{$compiledPath}'; ?>";
+  }
+  ```
+
+- **With `@blaze` wired up, the directive becomes the hook for all deeper optimizations — `memo`, `fold`, and anything else.**
+  ```blade
+  @blaze                   {{-- Level 1: optimized compiler only --}}
+  @blaze(memo: true)       {{-- Level 2: memoize this component --}}
+  @blaze(fold: true)       {{-- Level 3: code fold this component --}}
+  ```

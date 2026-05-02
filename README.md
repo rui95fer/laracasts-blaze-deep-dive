@@ -560,3 +560,61 @@
     → Blade captures it with ob_get_clean()
     → passes it as $slot variable into the child component
   ```
+
+---
+
+## Episode 12 — Code Folding
+
+- **Code folding pre-renders a component at compile time so it costs nothing at runtime.**
+  ```php
+  // In the compiler's match() method:
+  if ($this->shouldFold($sourcePath)) {
+      ob_start();
+      require $compiledPath; // render the component RIGHT NOW, at compile time
+      return ob_get_clean(); // the rendered HTML becomes part of the compiled template
+  }
+  ```
+
+- **The result: the component's HTML is baked directly into the parent template — no PHP runs at runtime at all.**
+  ```
+  Before folding (compiled output):
+    <?php require '/storage/framework/views/abc.php'; ?>
+
+  After folding (compiled output):
+    <button class="px-4 py-2">Save</button>
+    <!-- the component has vanished — it's just plain HTML now -->
+  ```
+
+- **Memoization vs folding — know when to use each.**
+  ```
+  Memoization — best for repeated, expensive components with dynamic output
+    → renders once, caches the result, reuses it
+    → still pays the cost once per request
+
+  Code folding — best for static components with no dynamic data
+    → renders once at compile time, costs zero at runtime
+    → 37ms → 12ms → ~0ms
+  ```
+
+- **The concept comes from "constant folding" in early compilers — evaluate static expressions at compile time so the runtime never has to.**
+  ```
+  C compiler example:
+    int x = 1 + 2;  →  compiled to:  int x = 3;
+    (the addition never runs at runtime)
+
+  Blaze equivalent:
+    <x-icon name="trash" />  →  compiled to:  <svg>...</svg>
+    (the component never renders at runtime)
+  ```
+
+- **Anything static in your templates is a candidate for folding — more than you'd expect.**
+  ```blade
+  {{-- These are ALL static — safe to fold: --}}
+  <x-button>Save</x-button>
+  <x-icon name="trash" />
+  <x-badge status="active" />
+
+  {{-- These are dynamic — cannot fold: --}}
+  <x-button>{{ $label }}</x-button>
+  <x-avatar :src="auth()->user()->avatar" />
+  ```

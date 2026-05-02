@@ -494,3 +494,69 @@
   Level 2 — memoization:         renders once, reuses the result  → eliminates repeated work
   Level 3 — code folding:        collapses static output at compile time → near-zero runtime cost
   ```
+
+---
+
+## Episode 11 — Adding Memoization
+
+- **Memoization = in-memory caching for the duration of a single request — not a persistent cache.**
+  ```php
+  // Persistent cache (survives across requests):
+  Cache::put('key', $value, now()->addHour());
+
+  // Memoization (lives only for this request):
+  Cache::rememberForever('key', fn () => $expensiveWork());
+  // In Blaze's real implementation this is an in-memory store, not the cache driver
+  ```
+
+- **Use `Cache::rememberForever()` to wrap output — the closure only runs on the first render, every subsequent render returns the stored result.**
+  ```php
+  echo Cache::rememberForever('component.button', function () {
+      ob_start();
+      require $compiledPath;
+      return ob_get_clean();
+  });
+  ```
+
+- **Use output buffering (`ob_start` / `ob_get_clean`) to capture a component's rendered HTML into a variable so it can be stored and reused.**
+  ```php
+  ob_start();           // start capturing all output
+  require $compiled;    // component renders into the buffer
+  $html = ob_get_clean(); // grab the captured output as a string, stop buffering
+  ```
+
+- **The compiler wraps the `require` in memoization code when `@blaze(memo: true)` is detected.**
+  ```php
+  function compileComponent(string $sourcePath, string $name): string
+  {
+      // ... compile and write $compiledPath as before ...
+
+      $key = "component.{$name}";
+
+      return <<<PHP
+      <?php echo cache()->rememberForever('{$key}', function () {
+          ob_start();
+          require '{$compiledPath}';
+          return ob_get_clean();
+      }); ?>
+      PHP;
+  }
+  ```
+
+- **Cache keys must include all component arguments to avoid collisions between different instances of the same component.**
+  ```php
+  // Wrong: two <x-badge status="active"> and <x-badge status="inactive">
+  // share the same key and return identical output
+  $key = "component.badge";
+
+  // Right: hash the component name + all its attributes together
+  $key = md5("badge" . serialize($attributes));
+  ```
+
+- **Output buffering is also how Blade's `$slot` works internally — slots capture echoed content into a variable and pass it into the component.**
+  ```
+  {{ $slot }} in a component
+    → parent template echoes slot content into an output buffer
+    → Blade captures it with ob_get_clean()
+    → passes it as $slot variable into the child component
+  ```

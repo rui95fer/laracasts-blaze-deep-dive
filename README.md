@@ -618,3 +618,59 @@
   <x-button>{{ $label }}</x-button>
   <x-avatar :src="auth()->user()->avatar" />
   ```
+
+---
+
+## Episode 13 — From Toy To Real
+
+- **Real Blaze uses the same `prepareStringsForCompilationUsing` hook as our toy — the entry point is identical.**
+  ```php
+  // Our toy:
+  Blade::precompiler(fn ($input) => (new Compiler)->compile($input));
+
+  // Real Blaze (simplified):
+  Blade::prepareStringsForCompilationUsing(fn ($input) => Blaze::compile($input));
+  ```
+
+- **Real Blaze compiles each component into a PHP function, then calls it with props — our toy just uses a plain `require`.**
+  ```php
+  // Toy output:
+  <?php require '/storage/framework/views/abc.php'; ?>
+
+  // Real Blaze output (simplified):
+  <?php Blaze::ensureRequired('/storage/framework/views/abc.php');
+  blaze_button_abc(['class' => $class]); ?>
+  // ensureRequired() skips the require if the file is already loaded — a small extra gain
+  ```
+
+- **Real Blaze's memoization is structurally identical to our toy — wraps the render in a key check, uses output buffering.**
+  ```php
+  // Toy:
+  echo Cache::rememberForever('component.button', function () {
+      ob_start(); require $compiled; return ob_get_clean();
+  });
+
+  // Real Blaze (simplified):
+  $key = BlazeMemoizer::key('button', $props);
+  if (BlazeMemoizer::has($key)) { echo BlazeMemoizer::get($key); }
+  else { ob_start(); blaze_button_abc($props);
+         BlazeMemoizer::put($key, ob_get_clean()); }
+  ```
+
+- **Real Blaze's folded output adds a source marker and cache-busting metadata — our toy just bakes the HTML in directly.**
+  ```php
+  // Toy fold output:
+  <button class="px-4 py-2">Save</button>
+
+  // Real Blaze fold output:
+  <?php /* blaze-folded: button | source: ...button.blade.php | mtime: 1234567890 */ ?>
+  <?php echo ltrim(ob_get_clean()); // ltrim fixes whitespace edge cases ?>
+  <button class="px-4 py-2">Save</button>
+  ```
+
+- **Real Blaze parses templates into an AST instead of using a simple regex — but the compile → fold → memoize decision flow is the same.**
+  ```
+  Toy:   regex match → shouldOptimize → shouldFold → shouldMemoize → output
+  Blaze: AST parse  → node fold      → memoize    → compile       → output
+  // Same logic, production-grade parsing
+  ```

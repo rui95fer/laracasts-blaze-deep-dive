@@ -674,3 +674,63 @@
   Blaze: AST parse  → node fold      → memoize    → compile       → output
   // Same logic, production-grade parsing
   ```
+
+---
+
+## Episode 14 — Limitations And Edge Cases
+
+- **Blaze does not support class-based components — only anonymous components.**
+  ```bash
+  # Class-based (NOT supported by Blaze):
+  php artisan make:component Button
+  # Creates app/View/Components/Button.php + resources/views/components/button.blade.php
+
+  # Anonymous (supported — what everyone uses now):
+  # Just create resources/views/components/button.blade.php with @props
+  ```
+
+- **`View::share()` variables are not available inside Blaze components — use `$__env->getShared()` as a workaround.**
+  ```php
+  // Service provider:
+  View::share('brand', 'Hello Kitty');
+  ```
+  ```blade
+  {{-- Breaks with @blaze: --}}
+  {{ $brand }}
+
+  {{-- Workaround: --}}
+  {{ $__env->getShared()['brand'] }}
+  ```
+
+- **`@aware` only works when parent and child are both Blade or both Blaze — mixing breaks it.**
+  ```blade
+  {{-- Works: both are @blaze --}}
+  <x-button-group size="lg">   {{-- @blaze --}}
+      <x-button />             {{-- @blaze + @aware(['size']) --}}
+  </x-button-group>
+
+  {{-- Breaks: mixed Blade/Blaze boundary --}}
+  <x-button-group size="lg">   {{-- plain Blade --}}
+      <x-button />             {{-- @blaze + @aware(['size']) --}}
+  </x-button-group>
+  ```
+
+- **`@aware` is an anti-pattern regardless of Blaze — avoid it because it inherits from any ancestor, not just the intended parent.**
+  ```blade
+  {{-- Intended: button-group passes size="lg" to buttons --}}
+  <x-modal size="lg">               {{-- unrelated ancestor --}}
+      <x-button-group>
+          <x-button />              {{-- accidentally picks up size="lg" from modal --}}
+      </x-button-group>
+  </x-modal>
+  {{-- @aware has no way to restrict which ancestor it listens to --}}
+  ```
+
+- **Full list of unsupported features — in practice none of these are commonly used.**
+  ```
+  ✗ Class-based components (php artisan make:component)
+  ✗ View::share() — use $__env->getShared() workaround
+  ✗ View composers on blade components
+  ✗ Rendering blade components via view() helper
+  ✗ @aware across Blade/Blaze boundaries
+  ```

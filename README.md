@@ -734,3 +734,51 @@
   ✗ Rendering blade components via view() helper
   ✗ @aware across Blade/Blaze boundaries
   ```
+
+---
+
+## Episode 15 — The Blade Profiler
+
+- **Enable Blaze's built-in profiler via `.env` — works even with Blaze optimization disabled.**
+  ```ini
+  # .env
+  BLAZE_ENABLED=true
+  BLAZE_DEBUG=true
+  ```
+  ```bash
+  php artisan view:clear  # always clear after changing Blaze settings
+  ```
+
+- **The profiler toolbar appears at the bottom of the page — click "Open Profiler" for the full flame chart.**
+  ```
+  Toolbar shows:
+  - Total render time
+  - Total component count
+  - Slowest components ranked by total time
+  ```
+
+- **"Total time" includes all children; "Total self time" is the component alone — use self time to find the real culprit.**
+  ```
+  modal  →  total time: 750ms  |  total self time: 7ms
+  ↑ modal itself is fast — its children (inputs, selects) are the problem
+  ```
+
+- **Profiler color codes tell you the optimization state of every component at a glance.**
+  ```
+  Blue   → unoptimized Blade component
+  Orange → compiled by Blaze (Level 1)
+  Green  → memoized (Level 2)   [shown in later episodes]
+  Purple → folded (Level 3)     [shown in later episodes]
+  Gray   → raw Blade view (not a component) — costs almost nothing
+  ```
+
+- **Enabling Blaze compilation alone (Level 1) shifts the bottleneck — use the profiler to find the new slowest component.**
+  ```
+  Before Blaze:
+    Slowest: <x-option />     481ms  (Blade overhead dominates)
+    Second:  <x-online-count> 200ms  (DB query)
+
+  After Blaze Level 1:
+    Slowest: <x-online-count> 200ms  (DB query — now exposed as the real culprit)
+    Second:  <x-option />      40ms  (Blade overhead gone, only rendering cost left)
+  ```

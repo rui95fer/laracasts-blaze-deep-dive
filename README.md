@@ -782,3 +782,63 @@
     Slowest: <x-online-count> 200ms  (DB query — now exposed as the real culprit)
     Second:  <x-option />      40ms  (Blade overhead gone, only rendering cost left)
   ```
+
+---
+
+## Episode 16 — When To Memoize
+
+- **Always reach for folding first — only fall back to memoization when folding isn't possible.**
+  ```
+  Decision flow:
+    Can this component be frozen in time? → Yes → fold: true
+    No → Is it repeated with stable props? → Yes → memo: true
+    No → Level 1 optimized compiler only
+  ```
+
+- **Don't fold a component that reads from the database, session, auth, or URL — it will freeze the stale value permanently.**
+  ```blade
+  {{-- WRONG — folding freezes the query result in the compiled file --}}
+  @blaze(fold: true)
+  <span>{{ DB::table('user_sessions')->where(...)->count() }} online</span>
+
+  {{-- RIGHT — memoize instead: fresh per request, free after the first render --}}
+  @blaze(memo: true)
+  <span>{{ DB::table('user_sessions')->where(...)->count() }} online</span>
+  ```
+
+- **Memoization caches for the duration of one request only — the value is always fresh on the next page load.**
+  ```
+  Request 1:  component renders → result cached in memory → reused for rest of request
+  Request 2:  cache is empty → component renders fresh again
+  ```
+
+- **Memoization does not work with slots — skip it if the component uses `{{ $slot }}` or named slots.**
+  ```blade
+  {{-- memo is silently ignored / falls back when slots are present --}}
+  @blaze(memo: true)
+  <div class="card">
+      {{ $slot }}  {{-- slots make memoization impossible --}}
+  </div>
+  ```
+
+- **Memoization only helps when the same props are repeated — unique props per iteration create a new cache entry every time, making things slower.**
+  ```blade
+  {{-- No benefit — every user has a different ID, every render is a cache miss --}}
+  @foreach ($users as $user)
+      <x-online-count :user="$user" />
+  @endforeach
+
+  {{-- Great fit — same component, same props, rendered many times --}}
+  @foreach ($posts as $post)
+      <x-online-count />   {{-- no dynamic props, one cache entry reused everywhere --}}
+  @endforeach
+  ```
+
+- **The best real-world use case for memoization is an avatar component — repeated everywhere, too dynamic to fold.**
+  ```blade
+  {{-- Flux's avatar: complex dynamic colors, used in every table row --}}
+  {{-- Can't fold (dynamic), but memo saves it because it repeats per user --}}
+  @blaze(memo: true)
+  @props(['src', 'name'])
+  <img src="{{ $src }}" class="rounded-full {{ $this->colorClass() }}" />
+  ```

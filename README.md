@@ -890,3 +890,49 @@
   ```
   There are specific barriers and edge cases where Blaze will safely fall back to avoiding folding. (Covered in the next episode)
   ```
+
+---
+
+## Episode 18 — Folding With Dynamic Props
+
+- **The Problem: Dynamic props break code folding.**
+  ```blade
+  {{-- Static props fold perfectly --}}
+  <x-option value="US">USA</x-option>
+
+  {{-- Dynamic props BREAK folding (Blaze doesn't know $code at compile time) --}}
+  <x-option :value="$code">{{ $country }}</x-option>
+  ```
+
+- **The Solution: Partial Folding with `safe` props.**
+  ```blade
+  {{-- resources/views/components/option.blade.php --}}
+  {{-- Tell Blaze that 'value' is a safe pass-through property --}}
+  @blaze(fold: true, safe: ['value'])
+  <option value="{{ $value }}">{{ $slot }}</option>
+  ```
+
+- **How partial folding works under the hood:**
+  ```
+  1. Blaze parses the blade file into an Abstract Syntax Tree (AST).
+  2. It temporarily replaces your dynamic expression with a static string (e.g., `blaze_placeholder_0`).
+  3. It pre-renders the component to static HTML using that placeholder.
+  4. It uses string replacement to swap the dynamic expression back into the finalized HTML.
+  ```
+
+- **The Golden Rule: `safe` props must be strictly "pass-through".**
+  ```
+  They must enter the component and be directly echoed out (`{{ $value }}`). You cannot mutate, validate, or measure them inside the component, because at compile time, the component is interacting with the placeholder string, not the real runtime data.
+  ```
+
+- **Pitfalls & Practical Examples of breaking `safe` props:**
+  ```blade
+  {{-- 1. Conditionals fail --}}
+  @if($size === 'sm')      {{-- Fails: It compares 'sm' to the string 'blaze_placeholder_0' --}}
+
+  {{-- 2. String helpers return fake results --}}
+  {{ strlen($value) }}     {{-- Returns ~20 (length of placeholder), not the length of "US" --}}
+
+  {{-- 3. String mutation breaks the placeholder swap entirely --}}
+  {{ strtolower($value) }} {{-- Output stays literal 'blaze_placeholder_0' because the case changed and Blaze's swap regex can't find it anymore --}}
+  ```

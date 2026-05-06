@@ -842,3 +842,51 @@
   @props(['src', 'name'])
   <img src="{{ $src }}" class="rounded-full {{ $this->colorClass() }}" />
   ```
+
+---
+
+## Episode 17 — When To Fold
+
+- **Always ask: "Is this a pure component?" before folding.**
+  ```php
+  // A pure component is like a pure function: it always returns the exact same output for the same inputs.
+  function sum($a, $b) {
+      return $a + $b; // Pure: Safe to fold
+  }
+
+  // It must not depend on external state, environment, or side effects.
+  function sum($a, $b) {
+      return $a + $b + DB::table('settings')->value('tax'); // Impure: Not safe to fold
+  }
+  ```
+
+- **Common culprits that make a component impure and un-foldable:**
+  ```blade
+  {{-- These directives or helpers change based on global state, not component props --}}
+  @error('email')             {{-- Error bags change per request / validation --}}
+  @guest                      {{-- Auth state / guards change per user --}}
+  {{ request()->url() }}      {{-- The URL / Route changes per request --}}
+  {{-- Also: Session state, DB queries, Cache reads --}}
+  ```
+
+- **If a component is pure, mark it with `fold: true` to get massive performance gains.**
+  ```blade
+  {{-- resources/views/components/option.blade.php --}}
+  {{-- Pure component: only depends on its inputs ($attributes, $slot) --}}
+  @blaze(fold: true)
+  <option {{ $attributes }}>{{ $slot }}</option>
+  ```
+
+- **Folding heavily repeated pure components collapses render graphs and drastically drops total time.**
+  ```
+  Example from the Profiler:
+  An <x-option> component rendered 49,000 times inside large select fields.
+
+  Without fold: ~77ms
+  With fold:    ~15ms  (Overall page render time cut in half to 62ms)
+  ```
+
+- **Limitations ahead: just because you add `fold: true` doesn't mean Blaze is always able to fold it.**
+  ```
+  There are specific barriers and edge cases where Blaze will safely fall back to avoiding folding. (Covered in the next episode)
+  ```

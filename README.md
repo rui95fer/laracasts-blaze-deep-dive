@@ -998,3 +998,64 @@
   - Everything else: keep folded when possible
   ```
 
+---
+
+## Episode 20 — AI Powered Optimization
+
+- **Use AI as an optimization assistant, not a replacement for judgment.**
+  ```
+  AI can automate most Blaze setup and tuning, but it may suggest unsafe folds/memoization.
+  Human review is still required for request-specific behavior (auth, URL, errors, etc.).
+  ```
+
+- **Practical setup flow: install Boost, install skill, verify your IDE sees it.**
+  ```bash
+  composer require laravel/boost
+  php artisan boost:install
+  ```
+  ```
+  Then verify your AI client can see:
+  - Laravel Boost MCP server
+  - Blaze optimization skill
+  ```
+
+- **Fastest safe workflow: run trace-based optimization, not whole-codebase speculation.**
+  ```
+  1. Enable Blaze debug/profiler.
+  2. Browse real slow pages in your app.
+  3. Let AI optimize based on captured traces.
+  4. Re-profile and compare before/after.
+
+  Why: lower token cost, fewer blind guesses, better component-level decisions.
+  ```
+
+- **What AI usually gets right quickly:**
+  ```
+  - Enabling Blaze globally (e.g., optimize components directory)
+  - Turning on debug mode for profiling
+  - Suggesting memoization for repeated expensive components (like online counts)
+  - Suggesting folding for highly repeated static components (like options/text wrappers)
+  ```
+
+- **What AI can miss (and what to manually verify):**
+  ```
+  - Choosing memo when fold is better
+  - Missing `safe` pass-through props for dynamic attributes
+  - Folding something request-specific and causing subtle UI regressions
+  ```
+  ```blade
+  {{-- Example sanity check after AI edits --}}
+  @blaze(fold: true, safe: ['value'])
+  <option value="{{ $value }}">{{ $slot }}</option>
+  ```
+
+- **Practical review loop you can reuse on every page:**
+  ```
+  Prompt AI -> review each proposed edit -> accept/reject with intent
+  -> run page again with profiler -> compare hot components
+  -> patch remaining edge cases manually.
+  ```
+  ```
+  Goal: get AI speed + human correctness.
+  ```
+

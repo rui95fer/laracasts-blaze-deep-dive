@@ -936,3 +936,65 @@
   {{-- 3. String mutation breaks the placeholder swap entirely --}}
   {{ strtolower($value) }} {{-- Output stays literal 'blaze_placeholder_0' because the case changed and Blaze's swap regex can't find it anymore --}}
   ```
+
+---
+
+## Episode 19 — Punching Holes With Unblaze
+
+- **`fold: true` can over-freeze dynamic output; `@unblaze` is the escape hatch.**
+  ```blade
+  {{-- Folded component: everything becomes static at compile time --}}
+  @blaze(fold: true)
+  <div>{{ now()->format('s') }}</div> {{-- gets frozen --}}
+  ```
+
+- **Use `@unblaze ... @endunblaze` to punch a dynamic hole inside an otherwise folded component.**
+  ```blade
+  @blaze(fold: true)
+  <div>
+      @unblaze
+          {{ now()->format('s') }} {{-- stays dynamic at runtime --}}
+      @endunblaze
+  </div>
+  ```
+
+- **Think of `@unblaze` as partial folding without `safe` placeholders: static shell, dynamic island.**
+  ```
+  Folded:   outer markup and static strings
+  Dynamic:  only the code inside @unblaze
+  Result:   keep most fold gains without freezing request-specific logic
+  ```
+
+- **Practical Livewire example: keep validation errors dynamic while folding input markup.**
+  ```blade
+  {{-- resources/views/components/input.blade.php --}}
+  @blaze(fold: true)
+  @props(['name', 'label'])
+
+  <div>
+      <label for="{{ $name }}">{{ $label }}</label>
+      <input id="{{ $name }}" name="{{ $name }}" />
+
+      @unblaze(scope: ['name' => $name])
+          @error($scope['name'])
+              <p class="text-red-600">{{ $message }}</p>
+          @enderror
+      @endunblaze
+  </div>
+  ```
+
+- **Important caveat: `@unblaze` is a scope wall, so pass required variables through `scope:`.**
+  ```blade
+  {{-- Without scope: undefined variable errors are likely in the unblaze block --}}
+  @unblaze(scope: ['name' => $name, 'url' => request()->path()])
+      {{-- Access via $scope[...] inside this block --}}
+  @endunblaze
+  ```
+
+- **Best real-world uses from the episode: error bags and current-URL checks in nav/input components.**
+  ```
+  - Validation messages: request-specific, must stay dynamic
+  - Active nav states: URL-specific, must stay dynamic
+  - Everything else: keep folded when possible
+  ```
+
